@@ -1,11 +1,16 @@
 name: Analizar Opciones Experimental
 
 on:
-  workflow_dispatch:  # Solo manual
+  workflow_dispatch:  # Ejecución manual
     inputs:
       GROUP_TYPE:
-        description: 'Tipo de grupo (7magnificas, indices, shortlist)'
+        description: 'Selecciona el grupo a analizar'
         required: true
+        type: choice
+        options:
+          - 7magnificas
+          - indices
+          - shortlist
         default: '7magnificas'
       SHORTLIST_TICKERS:
         description: 'Lista de tickers para shortlist (separados por comas)'
@@ -47,15 +52,45 @@ on:
         description: 'Mínimo bid para los contratos ($)'
         required: false
         default: '0.99'
-      DISCORD_WEBHOOK_URL_7MAGNIFICAS:
-        description: 'Webhook para 7magnificas'
-        required: false
-      DISCORD_WEBHOOK_URL_INDICES:
-        description: 'Webhook para indices'
-        required: false
-      DISCORD_WEBHOOK_URL_SHORTLIST:
-        description: 'Webhook para shortlist'
-        required: false
+  schedule:
+    # === Configuración de Horarios por Grupo (Fácil de Editar) ===
+    # Formato: 'minuto hora * * *' (en UTC)
+    # Ejemplo: '0 13 * * *' = 1:00 PM UTC, '0 15 * * *' = 3:00 PM UTC
+    # 7magnificas: 1pm, 3pm, 5pm UTC
+    - cron: '0 13 * * *'
+      inputs:
+        GROUP_TYPE: '7magnificas'
+    - cron: '0 15 * * *'
+      inputs:
+        GROUP_TYPE: '7magnificas'
+    - cron: '0 17 * * *'
+      inputs:
+        GROUP_TYPE: '7magnificas'
+    # indices: 11am, 1pm, 3pm UTC
+    - cron: '0 11 * * *'
+      inputs:
+        GROUP_TYPE: 'indices'
+    - cron: '0 13 * * *'
+      inputs:
+        GROUP_TYPE: 'indices'
+    - cron: '0 15 * * *'
+      inputs:
+        GROUP_TYPE: 'indices'
+    # shortlist: 2pm, 4pm UTC
+    - cron: '0 14 * * *'
+      inputs:
+        GROUP_TYPE: 'shortlist'
+    - cron: '0 16 * * *'
+      inputs:
+        GROUP_TYPE: 'shortlist'
+    # Para agregar un nuevo grupo, simplemente añade nuevas entradas cron aquí
+    # Ejemplo para un nuevo grupo "nuevo_grupo" a las 10am y 12pm UTC:
+    # - cron: '0 10 * * *'
+    #   inputs:
+    #     GROUP_TYPE: 'nuevo_grupo'
+    # - cron: '0 12 * * *'
+    #   inputs:
+    #     GROUP_TYPE: 'nuevo_grupo'
 
 jobs:
   analizar-opciones-experimental:
@@ -77,27 +112,27 @@ jobs:
 
       - name: Ejecutar script experimental
         env:
-          GROUP_TYPE: ${{ github.event.inputs.GROUP_TYPE }}
-          SHORTLIST_TICKERS: ${{ github.event.inputs.SHORTLIST_TICKERS }}
-          MARKETS: ${{ github.event.inputs.MARKETS }}
-          MIN_RENTABILIDAD_ANUAL: ${{ github.event.inputs.MIN_RENTABILIDAD_ANUAL }}
-          MAX_DIAS_VENCIMIENTO: ${{ github.event.inputs.MAX_DIAS_VENCIMIENTO }}
-          MIN_DIFERENCIA_PORCENTUAL: ${{ github.event.inputs.MIN_DIFERENCIA_PORCENTUAL }}
-          MIN_VOLATILIDAD_IMPLICITA: ${{ github.event.inputs.MIN_VOLATILIDAD_IMPLICITA }}
-          FILTRO_TIPO_OPCION: ${{ github.event.inputs.FILTRO_TIPO_OPCION }}
-          TOP_CONTRATOS: ${{ github.event.inputs.TOP_CONTRATOS }}
-          FORCE_DISCORD_NOTIFICATION: ${{ github.event.inputs.FORCE_DISCORD_NOTIFICATION }}
-          MIN_BID: ${{ github.event.inputs.MIN_BID }}
-          DISCORD_WEBHOOK_URL_7MAGNIFICAS: ${{ github.event.inputs.DISCORD_WEBHOOK_URL_7MAGNIFICAS }}
-          DISCORD_WEBHOOK_URL_INDICES: ${{ github.event.inputs.DISCORD_WEBHOOK_URL_INDICES }}
-          DISCORD_WEBHOOK_URL_SHORTLIST: ${{ github.event.inputs.DISCORD_WEBHOOK_URL_SHORTLIST }}
+          GROUP_TYPE: ${{ github.event.inputs.GROUP_TYPE || github.event.schedule.inputs.GROUP_TYPE }}
+          SHORTLIST_TICKERS: ${{ github.event.inputs.SHORTLIST_TICKERS || 'NA9.DE,TEP.PA,GOOGL,EPAM,NFE,GLNG,GLOB,NVDA' }}
+          MARKETS: ${{ github.event.inputs.MARKETS || 'NASDAQ' }}
+          MIN_RENTABILIDAD_ANUAL: ${{ github.event.inputs.MIN_RENTABILIDAD_ANUAL || '45.0' }}
+          MAX_DIAS_VENCIMIENTO: ${{ github.event.inputs.MAX_DIAS_VENCIMIENTO || '45' }}
+          MIN_DIFERENCIA_PORCENTUAL: ${{ github.event.inputs.MIN_DIFERENCIA_PORCENTUAL || '5.0' }}
+          MIN_VOLATILIDAD_IMPLICITA: ${{ github.event.inputs.MIN_VOLATILIDAD_IMPLICITA || '35.0' }}
+          FILTRO_TIPO_OPCION: ${{ github.event.inputs.FILTRO_TIPO_OPCION || 'OTM' }}
+          TOP_CONTRATOS: ${{ github.event.inputs.TOP_CONTRATOS || '5' }}
+          FORCE_DISCORD_NOTIFICATION: ${{ github.event.inputs.FORCE_DISCORD_NOTIFICATION || 'false' }}
+          MIN_BID: ${{ github.event.inputs.MIN_BID || '0.99' }}
+          DISCORD_WEBHOOK_URL_7MAGNIFICAS: ${{ secrets.DISCORD_WEBHOOK_URL_7MAGNIFICAS }}
+          DISCORD_WEBHOOK_URL_INDICES: ${{ secrets.DISCORD_WEBHOOK_URL_INDICES }}
+          DISCORD_WEBHOOK_URL_SHORTLIST: ${{ secrets.DISCORD_WEBHOOK_URL_SHORTLIST }}
         run: |
           python analizar_opciones_experimental.py 2>&1 | tee output.log
 
       - name: Subir resultados como artefactos
         uses: actions/upload-artifact@v4
         with:
-          name: resultados-experimental
+          name: resultados-experimental-${{ github.event.inputs.GROUP_TYPE || github.event.schedule.inputs.GROUP_TYPE }}
           path: |
             resultados.txt
             todas_las_opciones.csv
