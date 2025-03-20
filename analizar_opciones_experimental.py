@@ -6,14 +6,35 @@ import pandas as pd
 import requests
 import time
 
-# Configuración dinámica de Discord Webhooks por grupo
-DISCORD_WEBHOOK_URL_DEFAULT = "https://discord.com/api/webhooks/1350463523196768356/ePmWnO2XWnfD582oMAr2WzqSFs7ZxU1ApRYi1bz8PiSbZE5zAcR7ZoOD8SPVofxA9UUW"
-DISCORD_WEBHOOKS = {
-    "7magnificas": os.getenv("DISCORD_WEBHOOK_URL_7MAGNIFICAS", "https://discord.com/api/webhooks/1351687590536806431/nWxbEuawqZUwsk5nU39Mhoo366_beQqGUTEDpaKdJndnIXzW7r_wvPe8a8nW5PuApQmF"),
-    "indices": os.getenv("DISCORD_WEBHOOK_URL_INDICES", "https://discord.com/api/webhooks/1351688679353221202/Aoyn8_T6YWl4QYruzauJGoqYKyGek6UVoomUa3APmEXt4RkhX9spXvhAgDSf1Ck00SJA"),
-    "shortlist": os.getenv("DISCORD_WEBHOOK_URL_SHORTLIST", "https://discord.com/api/webhooks/1351688806570655824/hOlRcUJ2UkErdZGfSLBOAq2WekOg4aEtjRZkQHLNvrYdebuytW7cyZPQkGTjVpcG46cI")
+# === Configuración de Grupos y Tickers (Fácil de Escalar) ===
+# Agrega nuevos grupos aquí siguiendo el mismo formato
+GROUPS_CONFIG = {
+    "7magnificas": {
+        "tickers": ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "NVDA"],
+        "description": "Las 7 magníficas (tecnología principal)",
+        "webhook": os.getenv("DISCORD_WEBHOOK_URL_7MAGNIFICAS", "https://discord.com/api/webhooks/1351687590536806431/nWxbEuawqZUwsk5nU39Mhoo366_beQqGUTEDpaKdJndnIXzW7r_wvPe8a8nW5PuApQmF")
+    },
+    "indices": {
+        "tickers": ["^GSPC", "^DJI", "^IXIC"],
+        "description": "Índices principales (S&P 500, Dow Jones, NASDAQ)",
+        "webhook": os.getenv("DISCORD_WEBHOOK_URL_INDICES", "https://discord.com/api/webhooks/1351688679353221202/Aoyn8_T6YWl4QYruzauJGoqYKyGek6UVoomUa3APmEXt4RkhX9spXvhAgDSf1Ck00SJA")
+    },
+    "shortlist": {
+        "tickers": os.getenv("SHORTLIST_TICKERS", "NA9.DE,TEP.PA,GOOGL,EPAM,NFE,GLNG,GLOB,NVDA").split(","),
+        "description": "Lista personalizada de tickers",
+        "webhook": os.getenv("DISCORD_WEBHOOK_URL_SHORTLIST", "https://discord.com/api/webhooks/1351688806570655824/hOlRcUJ2UkErdZGfSLBOAq2WekOg4aEtjRZkQHLNvrYdebuytW7cyZPQkGTjVpcG46cI")
+    }
+    # Para agregar un nuevo grupo, simplemente añade una nueva entrada aquí, por ejemplo:
+    # "nuevo_grupo": {
+    #     "tickers": ["TICKER1", "TICKER2"],
+    #     "description": "Descripción del nuevo grupo",
+    #     "webhook": os.getenv("DISCORD_WEBHOOK_URL_NUEVO_GRUPO", "URL_POR_DEFECTO")
+    # }
 }
-print(f"[DEBUG] Webhooks configurados: {DISCORD_WEBHOOKS}")
+print(f"[DEBUG] Grupos configurados: {GROUPS_CONFIG}")
+
+# Configuración por defecto para Discord (usada si no se especifica un webhook para el grupo)
+DISCORD_WEBHOOK_URL_DEFAULT = "https://discord.com/api/webhooks/1350463523196768356/ePmWnO2XWnfD582oMAr2WzqSFs7ZxU1ApRYi1bz8PiSbZE5zAcR7ZoOD8SPVofxA9UUW"
 
 # Variable para evitar ejecuciones múltiples en una sola instancia
 SCRIPT_EJECUTADO = False
@@ -34,23 +55,6 @@ DEFAULT_CONFIG = {
     "MIN_BID": 0.99
 }
 
-# Definición de grupos preconfigurados (fácil de extender)
-PRECONFIGURED_GROUPS = {
-    "7magnificas": {
-        "tickers": ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "NVDA"],
-        "description": "Las 7 magníficas (tecnología principal)"
-    },
-    "indices": {
-        "tickers": ["^GSPC", "^DJI", "^IXIC"],
-        "description": "Índices principales (S&P 500, Dow Jones, NASDAQ)"
-    },
-    "shortlist": {
-        "tickers": os.getenv("SHORTLIST_TICKERS", "NA9.DE,TEP.PA,GOOGL,EPAM,NFE,GLNG,GLOB,NVDA").split(","),
-        "description": "Lista personalizada de tickers"
-    }
-}
-print(f"[DEBUG] Grupos configurados: {PRECONFIGURED_GROUPS}")
-
 # Clave API de Finnhub
 FINNHUB_API_KEY = "cvbfudhr01qob7udcs1gcvbfudhr01qob7udcs20"
 
@@ -59,11 +63,11 @@ def obtener_configuracion():
     GROUP_TYPE = os.getenv("GROUP_TYPE", "7magnificas").lower()
     print(f"[DEBUG] Grupo seleccionado: {GROUP_TYPE}")
 
-    if GROUP_TYPE not in PRECONFIGURED_GROUPS:
+    if GROUP_TYPE not in GROUPS_CONFIG:
         print(f"Grupo no reconocido: {GROUP_TYPE}. Usando '7magnificas' por defecto.")
         GROUP_TYPE = "7magnificas"
 
-    group_config = PRECONFIGURED_GROUPS[GROUP_TYPE]
+    group_config = GROUPS_CONFIG[GROUP_TYPE]
     TICKERS = [t.strip() for t in group_config["tickers"] if t.strip()]  # Limpiar y validar tickers
     print(f"[DEBUG] Tickers para {GROUP_TYPE}: {TICKERS}")
 
@@ -84,7 +88,7 @@ def obtener_configuracion():
     return (TICKERS, MIN_RENTABILIDAD_ANUAL, MAX_DIAS_VENCIMIENTO, MIN_DIFERENCIA_PORCENTUAL,
             MIN_VOLUMEN, MIN_VOLATILIDAD_IMPLICITA, MIN_OPEN_INTEREST,
             FILTRO_TIPO_OPCION, TOP_CONTRATOS, ALERTA_RENTABILIDAD_ANUAL, ALERTA_VOLATILIDAD_MINIMA,
-            MIN_BID, GROUP_TYPE, group_config["description"])
+            MIN_BID, GROUP_TYPE, group_config["description"], group_config["webhook"])
 
 def obtener_datos_subyacente(ticker):
     """Obtiene datos del subyacente."""
@@ -189,30 +193,38 @@ def calcular_diferencia_porcentual(precio_subyacente, break_even):
     """Calcula diferencia porcentual."""
     return ((precio_subyacente - break_even) / precio_subyacente) * 100
 
-def enviar_notificacion_discord(tipo_opcion_texto, top_contratos, tickers_identificados, alerta_rentabilidad_anual, alerta_volatilidad_minima, group_type):
-    """Envía notificación a Discord."""
-    webhook_url = DISCORD_WEBHOOKS.get(group_type, DISCORD_WEBHOOK_URL_DEFAULT)
+def enviar_notificacion_discord(tipo_opcion_texto, top_contratos, tickers_identificados, alerta_rentabilidad_anual, alerta_volatilidad_minima, group_type, webhook_url):
+    """Envía notificación a Discord con formato mejorado."""
     print(f"[DEBUG] Enviando a {webhook_url} para {group_type}")
     if not webhook_url or not webhook_url.startswith(('http://', 'https://')):
         print(f"Error: Webhook inválido para {group_type}: {webhook_url}")
         return
 
     ticker_list = ", ".join(tickers_identificados) if tickers_identificados else "Ninguno"
-    mensaje = f"[{group_type.upper()}] Alertas para: {ticker_list}"
+    mensaje = (
+        f"**[{group_type.upper()}] Nuevas Oportunidades de Opciones**\n"
+        f"**Tipo de Opción:** {tipo_opcion_texto}\n"
+        f"**Top Contratos por Ticker:** {top_contratos}\n"
+        f"**Tickers Identificados:** {ticker_list}\n"
+        f"**Criterios de Alerta:** Rentabilidad Anual ≥ {alerta_rentabilidad_anual}%, Volatilidad Implícita ≥ {alerta_volatilidad_minima}%\n"
+        f"**Archivo Adjunto:** Mejores_Contratos.txt (ver detalles abajo)"
+    )
 
     try:
         file_size = os.path.getsize("Mejores_Contratos.txt")
         if file_size > 8 * 1024 * 1024:
-            mensaje += f"\nArchivo demasiado grande ({file_size / (1024 * 1024):.2f} MB)."
+            mensaje += f"\n⚠️ **Archivo demasiado grande** ({file_size / (1024 * 1024):.2f} MB). Revisa los artifacts en GitHub Actions."
             payload = {"content": mensaje}
             response = requests.post(webhook_url, json=payload)
             response.raise_for_status()
+            print(f"Notificación de error enviada a {webhook_url}")
             return
     except FileNotFoundError:
-        mensaje += "\nArchivo Mejores_Contratos.txt no encontrado."
+        mensaje += "\n⚠️ **Archivo no encontrado:** Mejores_Contratos.txt. Revisa los logs para más detalles."
         payload = {"content": mensaje}
         response = requests.post(webhook_url, json=payload)
         response.raise_for_status()
+        print(f"Notificación de error enviada a {webhook_url}")
         return
 
     try:
@@ -239,7 +251,7 @@ def analizar_opciones():
         (TICKERS, MIN_RENTABILIDAD_ANUAL, MAX_DIAS_VENCIMIENTO, MIN_DIFERENCIA_PORCENTUAL,
          MIN_VOLUMEN, MIN_VOLATILIDAD_IMPLICITA, MIN_OPEN_INTEREST,
          FILTRO_TIPO_OPCION, TOP_CONTRATOS, ALERTA_RENTABILIDAD_ANUAL, ALERTA_VOLATILIDAD_MINIMA,
-         MIN_BID, GROUP_TYPE, group_description) = obtener_configuracion()
+         MIN_BID, GROUP_TYPE, group_description, webhook_url) = obtener_configuracion()
     except Exception as e:
         print(f"Error en configuración: {e}")
         with open("resultados.txt", "w") as f:
@@ -356,7 +368,7 @@ def analizar_opciones():
                    "Rent. Anual", "Break-even", "Dif. %", "Vol. Impl.", "Volumen",
                    "Interés", "Fuente"]
         if todas_opciones:
-            df_todas = pd.DataFrame([[o["ticker"]] + [f"${o[k]:.2f}" if k in ["strike", "lastPrice", "bid", "break_even"] else o[k]
+            df_todas = pd.DataFrame([[o["ticker"]] + [f"${o[k]:.2f}" if k in ["strike", "lastPrice", "bid", "break_even"] else f"{o[k]:.2f}%" if k in ["rentabilidad_diaria", "rentabilidad_anual", "diferencia_porcentual", "volatilidad_implícita"] else o[k]
                                                     for k in ["strike", "lastPrice", "bid", "vencimiento", "dias_vencimiento",
                                                               "rentabilidad_diaria", "rentabilidad_anual", "break_even",
                                                               "diferencia_porcentual", "volatilidad_implícita", "volumen",
@@ -376,21 +388,37 @@ def analizar_opciones():
         if mejores_contratos:
             tickers_identificados = sorted(set(o["ticker"] for o in mejores_contratos))
             contenido = f"Mejores Contratos ({GROUP_TYPE}):\n{'='*50}\n"
+            contratos_por_ticker = {}
+            for opcion in mejores_contratos:
+                ticker = opcion['ticker']
+                if ticker not in contratos_por_ticker:
+                    contratos_por_ticker[ticker] = []
+                contratos_por_ticker[ticker].append(opcion)
+
             for ticker in sorted(tickers_identificados):
-                contratos = [o for o in mejores_contratos if o["ticker"] == ticker]
-                contenido += f"\n{ticker}\n{'-'*30}\n"
-                tabla = tabulate([[f"${o['strike']:.2f}", f"${o['lastPrice']:.2f}", f"${o['bid']:.2f}",
-                                 o['vencimiento'], o['dias_vencimiento'], f"{o['rentabilidad_diaria']:.2f}%",
-                                 f"{o['rentabilidad_anual']:.2f}%", f"${o['break_even']:.2f}",
-                                 f"{o['diferencia_porcentual']:.2f}%", f"{o['volatilidad_implícita']:.2f}%",
-                                 o['volumen'], o['open_interest'], o['source']] for o in contratos],
-                                headers=["Strike", "Last", "Bid", "Venc.", "Días", "Rent. Diaria",
-                                         "Rent. Anual", "Break-even", "Dif. %", "Vol. Impl.",
-                                         "Volumen", "Interés", "Fuente"], tablefmt="grid")
-                contenido += f"{tabla}\n"
+                contratos = contratos_por_ticker[ticker]
+                contenido += f"\nTicker: {ticker}\n{'-'*30}\n"
+                for i, opcion in enumerate(contratos, 1):
+                    contenido += f"Contrato {i}:\n"
+                    contenido += f"  Ticker: {opcion['ticker']}\n"
+                    contenido += f"  Strike: ${opcion['strike']:.2f}\n"
+                    contenido += f"  Last Closed: ${opcion['lastPrice']:.2f}\n"
+                    contenido += f"  Bid: ${opcion['bid']:.2f}\n"
+                    contenido += f"  Vencimiento: {opcion['vencimiento']}\n"
+                    contenido += f"  Días Venc.: {opcion['dias_vencimiento']}\n"
+                    contenido += f"  Rent. Diaria: {opcion['rentabilidad_diaria']:.2f}%\n"
+                    contenido += f"  Rent. Anual: {opcion['rentabilidad_anual']:.2f}%\n"
+                    contenido += f"  Break-even: ${opcion['break_even']:.2f}\n"
+                    contenido += f"  Dif. % (Suby.-Break.): {opcion['diferencia_porcentual']:.2f}%\n"
+                    contenido += f"  Volatilidad Implícita: {opcion['volatilidad_implícita']:.2f}%\n"
+                    contenido += f"  Volumen: {opcion['volumen']}\n"
+                    contenido += f"  Interés Abierto: {opcion['open_interest']}\n"
+                    contenido += f"  Fuente: {opcion['source']}\n"
+                    contenido += "\n"
+
             with open("Mejores_Contratos.txt", "w") as f:
                 f.write(contenido)
-            df_mejores = pd.DataFrame([[o["ticker"]] + [f"${o[k]:.2f}" if k in ["strike", "lastPrice", "bid", "break_even"] else o[k]
+            df_mejores = pd.DataFrame([[o["ticker"]] + [f"${o[k]:.2f}" if k in ["strike", "lastPrice", "bid", "break_even"] else f"{o[k]:.2f}%" if k in ["rentabilidad_diaria", "rentabilidad_anual", "diferencia_porcentual", "volatilidad_implícita"] else o[k]
                                                        for k in ["strike", "lastPrice", "bid", "vencimiento", "dias_vencimiento",
                                                                  "rentabilidad_diaria", "rentabilidad_anual", "break_even",
                                                                  "diferencia_porcentual", "volatilidad_implícita", "volumen",
@@ -400,7 +428,7 @@ def analizar_opciones():
             if not es_manual or force_discord or ENVIAR_NOTIFICACION_MANUAL:
                 tipo_opcion = "Out of the Money" if FILTRO_TIPO_OPCION == "OTM" else "In the Money" if FILTRO_TIPO_OPCION == "ITM" else "Todas"
                 enviar_notificacion_discord(tipo_opcion, TOP_CONTRATOS, tickers_identificados,
-                                          ALERTA_RENTABILIDAD_ANUAL, ALERTA_VOLATILIDAD_MINIMA, GROUP_TYPE)
+                                          ALERTA_RENTABILIDAD_ANUAL, ALERTA_VOLATILIDAD_MINIMA, GROUP_TYPE, webhook_url)
         else:
             pd.DataFrame(columns=headers).to_csv("mejores_contratos.csv", index=False)
 
